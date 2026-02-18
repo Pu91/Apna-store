@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checkout - MyShop</title>
+
+<style>
+body{font-family:system-ui;background:#f1f3f6;margin:0}
+.container{max-width:650px;margin:auto;padding:15px}
+.card{
+background:white;
+padding:15px;
+border-radius:10px;
+margin-bottom:15px;
+box-shadow:0 2px 8px rgba(0,0,0,0.08);
+}
+input{
+width:100%;
+padding:10px;
+margin:6px 0;
+border-radius:6px;
+border:1px solid #ccc;
+}
+button{
+width:100%;
+padding:12px;
+background:#fb641b;
+color:white;
+border:none;
+border-radius:6px;
+font-size:16px;
+cursor:pointer;
+}
+button:disabled{background:gray}
+.total{font-weight:bold;font-size:18px}
+.error{color:red}
+.loader{display:none;text-align:center;margin-top:10px}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="card">
+<h3>Order Summary</h3>
+<p id="subtotal"></p>
+<p id="discount"></p>
+<p class="total" id="total"></p>
+</div>
+
+<div class="card">
+<h3>Shipping Details</h3>
+
+<input type="text" id="name" placeholder="Full Name">
+<input type="text" id="phone" placeholder="Phone Number">
+<input type="email" id="email" placeholder="Email Address">
+<input type="text" id="address" placeholder="Full Address">
+<input type="text" id="city" placeholder="City">
+<input type="text" id="state" placeholder="State">
+<input type="text" id="pin" placeholder="PIN Code">
+
+<button id="orderBtn">Place Order (COD)</button>
+
+<div class="loader" id="loader">Processing Order...</div>
+<p id="msg"></p>
+</div>
+
+</div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+
+const supabase = createClient(
+"https://ooiumaohawwtqtiodqcv.supabase.co",
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vaXVtYW9oYXd3dHF0aW9kcWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNDQ1MjMsImV4cCI6MjA4NjcyMDUyM30.S_1J8CFMa1KJUYfk1VYeUcFRqUo23NEGzNlxr5fQsvA"
+)
+
+let cart = JSON.parse(localStorage.getItem("cart")) || []
+let discountAmount = parseFloat(localStorage.getItem("discountAmount")) || 0
+
+const msg = document.getElementById("msg")
+const loader = document.getElementById("loader")
+const btn = document.getElementById("orderBtn")
+
+// LOAD SUMMARY
+function loadSummary(){
+  let subtotal = cart.reduce((sum,item)=>sum+(item.price*item.quantity),0)
+  document.getElementById("subtotal").innerText="Subtotal: ₹"+subtotal
+  document.getElementById("discount").innerText="Discount: ₹"+discountAmount
+  document.getElementById("total").innerText="Total: ₹"+(subtotal-discountAmount)
+}
+loadSummary()
+
+btn.addEventListener("click", placeOrder)
+
+async function placeOrder(){
+  msg.innerText=""
+  msg.className=""
+
+  if(cart.length===0){
+    msg.innerText="Cart Empty ❌"
+    msg.className="error"
+    return
+  }
+
+  // LOGIN CHECK
+  const { data:{ session } } = await supabase.auth.getSession()
+  if(!session){
+    msg.innerText="Please login first ❌"
+    msg.className="error"
+    return
+  }
+  const user = session.user
+
+  // FORM VALIDATION
+  const name=document.getElementById("name").value.trim()
+  const phone=document.getElementById("phone").value.trim()
+  const email=document.getElementById("email").value.trim()
+  const address=document.getElementById("address").value.trim()
+  const city=document.getElementById("city").value.trim()
+  const state=document.getElementById("state").value.trim()
+  const pin=document.getElementById("pin").value.trim()
+
+  if(!name||!phone||!email||!address||!city||!state||!pin){
+    msg.innerText="Fill all details ❌"
+    msg.className="error"
+    return
+  }
+
+  btn.disabled=true
+  loader.style.display="block"
+
+  try{
+    // STOCK CHECK
+    for(const item of cart){
+      const { data:stock } = await supabase
+      .from("products")
+      .select("quantity")
+      .eq("id",item.id)
+      .single()
+
+      if(!stock || stock.quantity < item.quantity){
+        throw new Error(item.name+" is out of stock ❌")
+      }
+    }
+
+    // CALCULATE TOTALS
+    let subtotal = cart.reduce((sum,item)=>sum+(item.price*item.quantity),0)
+    let finalTotal = subtotal - discountAmount
+
+    // CREATE ORDER
+    const { data:orderData, error:orderError } = await supabase
+    .from("orders")
+    .insert([{
+      user_id:user.id,
+      customer_name:name,
+      customer_phone:phone,
+      email:email,
+      address:address,
+      city:city,
+      state:state,
+      pin_code:pin,
+      total_amount:subtotal,
+      discount_amount:discountAmount,
+      final_total:finalTotal,
+      payment_method:"Cash On Delivery",
+      status:"Pending",
+      address_updated:false
+    }])
+    .select()
+
+    if(orderError) throw orderError
+
+    const orderId = orderData[0].id
+
+    // INSERT ORDER ITEMS
+    const orderItems = cart.map(item=>({
+      order_id:orderId,
+      product_id:item.id,
+      product_name:item.name,
+      price:item.price,
+      quantity:item.quantity,
+      subtotal:item.price*item.quantity
+    }))
+    const { error:itemError } = await supabase.from("order_items").insert(orderItems)
+    if(itemError) throw itemError
+
+    // UPDATE STOCK
+    for(const item of cart){
+      const { data:stock } = await supabase
+      .from("products")
+      .select("quantity")
+      .eq("id",item.id)
+      .single()
+
+      await supabase
+      .from("products")
+      .update({ quantity: stock.quantity - item.quantity })
+      .eq("id",item.id)
+    }
+
+    // CLEAR CART
+    localStorage.setItem("lastOrderId",orderId)
+    localStorage.removeItem("cart")
+    localStorage.removeItem("discountAmount")
+
+    // REDIRECT
+    window.location.href="/sell/order successful.html"
+
+  }catch(err){
+    msg.innerText="Error: "+err.message
+    msg.className="error"
+    btn.disabled=false
+    loader.style.display="none"
+  }
+}
+</script>
+
+</body>
+</html>
