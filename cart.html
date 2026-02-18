@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MyShop Cart</title>
+
+<style>
+body{font-family:system-ui;background:#f1f3f6;margin:0}
+.container{max-width:600px;margin:auto;padding:15px}
+.card{background:white;padding:10px;margin-bottom:10px;border-radius:8px}
+img{width:70px;height:70px;object-fit:cover;border-radius:6px}
+button{padding:6px 10px;background:#fb641b;color:white;border:none;border-radius:5px;margin-top:5px;cursor:pointer}
+.remove{background:red}
+.qtybtn{padding:3px 8px}
+.summary{background:white;padding:10px;border-radius:8px;margin-top:10px}
+.checkoutbtn{width:100%;padding:12px;font-size:16px}
+input{width:100%;padding:8px;margin:5px 0;border-radius:5px;border:1px solid #ccc}
+#coupon_msg{font-weight:bold}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+<h2>Your Cart</h2>
+<div id="cart-items"></div>
+
+<div class="summary">
+<p id="subtotal"></p>
+<p id="discount"></p>
+<h3 id="total"></h3>
+</div>
+
+<h3>Apply Coupon</h3>
+<input type="text" id="coupon_input" placeholder="Enter Coupon Code">
+<button id="applyBtn">Apply Coupon</button>
+<p id="coupon_msg"></p>
+
+<button class="checkoutbtn" id="checkoutBtn">Proceed To Checkout</button>
+</div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+
+const supabase = createClient(
+"https://ooiumaohawwtqtiodqcv.supabase.co",
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vaXVtYW9oYXd3dHF0aW9kcWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNDQ1MjMsImV4cCI6MjA4NjcyMDUyM30.S_1J8CFMa1KJUYfk1VYeUcFRqUo23NEGzNlxr5fQsvA"
+)
+
+let cart = JSON.parse(localStorage.getItem("cart")) || []
+let discountAmount = parseFloat(localStorage.getItem("discountAmount")) || 0
+let appliedCoupon = JSON.parse(localStorage.getItem("appliedCoupon")) || null
+
+const container = document.getElementById("cart-items")
+const subtotalEl = document.getElementById("subtotal")
+const discountEl = document.getElementById("discount")
+const totalEl = document.getElementById("total")
+const couponMsg = document.getElementById("coupon_msg")
+
+function loadCart(){
+container.innerHTML=""
+let subtotal=0
+
+if(cart.length===0){
+container.innerHTML="<p>Your cart is empty</p>"
+subtotalEl.innerText=""
+discountEl.innerText=""
+totalEl.innerText=""
+return
+}
+
+cart.forEach((item,index)=>{
+subtotal += item.price * item.quantity
+
+container.innerHTML += `
+<div class="card">
+<img src="${item.image}">
+<p><b>${item.name}</b></p>
+<p>₹${item.price}</p>
+Quantity:
+<button class="qtybtn" onclick="changeQty(${index},-1)">-</button>
+${item.quantity}
+<button class="qtybtn" onclick="changeQty(${index},1)">+</button>
+<br>
+<button class="remove" onclick="removeItem(${index})">Remove</button>
+</div>
+`
+})
+
+subtotalEl.innerText="Subtotal: ₹"+subtotal
+discountEl.innerText="Discount: ₹"+discountAmount
+totalEl.innerText="Total: ₹"+(subtotal-discountAmount)
+}
+
+window.changeQty=(index,change)=>{
+cart[index].quantity += change
+if(cart[index].quantity<=0){ cart.splice(index,1) }
+localStorage.setItem("cart",JSON.stringify(cart))
+resetCoupon()
+loadCart()
+}
+
+window.removeItem=(index)=>{
+cart.splice(index,1)
+localStorage.setItem("cart",JSON.stringify(cart))
+resetCoupon()
+loadCart()
+}
+
+function resetCoupon(){
+discountAmount=0
+appliedCoupon=null
+localStorage.removeItem("discountAmount")
+localStorage.removeItem("appliedCoupon")
+couponMsg.innerText=""
+}
+
+document.getElementById("applyBtn").addEventListener("click", async ()=>{
+
+const code=document.getElementById("coupon_input").value.trim().toUpperCase()
+if(!code){
+couponMsg.innerText="Enter coupon code"
+return
+}
+
+let subtotal = cart.reduce((sum,item)=>sum+(item.price*item.quantity),0)
+
+const { data,error } = await supabase
+.from("coupons")
+.select("*")
+.eq("code",code)
+.single()
+
+if(error || !data){
+couponMsg.innerText="Invalid Coupon ❌"
+return
+}
+
+if(!data.active){
+couponMsg.innerText="Inactive Coupon ❌"
+return
+}
+
+if(data.expiry_date && new Date(data.expiry_date)<new Date()){
+couponMsg.innerText="Expired ❌"
+return
+}
+
+if(subtotal < data.min_order){
+couponMsg.innerText="Minimum order ₹"+data.min_order
+return
+}
+
+if(data.discount_type==="percent"){
+discountAmount=(subtotal*data.discount_value)/100
+}else{
+discountAmount=data.discount_value
+}
+
+if(discountAmount>subtotal){discountAmount=subtotal}
+
+appliedCoupon=data
+
+localStorage.setItem("discountAmount",discountAmount)
+localStorage.setItem("appliedCoupon",JSON.stringify(appliedCoupon))
+
+couponMsg.innerText="Coupon Applied ✅"
+loadCart()
+})
+
+document.getElementById("checkoutBtn").addEventListener("click", ()=>{
+if(cart.length===0){
+alert("Cart Empty")
+return
+}
+window.location.href="/sell/chakout.html"
+})
+
+loadCart()
+</script>
+
+</body>
+</html>
