@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Orders</title>
+
+<style>
+body{
+  font-family:system-ui;
+  background:#f1f3f6;
+  margin:0;
+}
+
+.header{
+  background:#2874f0;
+  color:white;
+  padding:15px;
+  font-size:18px;
+  font-weight:bold;
+}
+
+.container{
+  max-width:900px;
+  margin:auto;
+  padding:15px;
+}
+
+.card{
+  background:white;
+  padding:15px;
+  border-radius:12px;
+  margin-bottom:15px;
+  box-shadow:0 4px 10px rgba(0,0,0,0.08);
+  transition:0.3s;
+}
+
+.card:hover{
+  transform:translateY(-3px);
+}
+
+.row{
+  display:flex;
+  justify-content:space-between;
+  flex-wrap:wrap;
+}
+
+.badge{
+  padding:5px 10px;
+  border-radius:20px;
+  font-size:12px;
+  color:white;
+}
+
+.pending{background:orange}
+.shipped{background:#2874f0}
+.delivered{background:green}
+.cancelled{background:red}
+
+button{
+  padding:8px 12px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+  margin-top:8px;
+}
+
+.viewBtn{ background:#2874f0; color:white; }
+.cancelBtn{ background:red; color:white; margin-left:10px; }
+.editBtn{ background:#fb641b; color:white; margin-left:10px; }
+.disabledBtn{ background:gray; color:white; cursor:not-allowed; }
+
+.empty{
+  text-align:center;
+  margin-top:40px;
+  color:gray;
+}
+
+/* MODAL */
+.modal{
+  display:none;
+  position:fixed;
+  top:0;left:0;
+  width:100%;height:100%;
+  background:rgba(0,0,0,0.5);
+  justify-content:center;
+  align-items:center;
+}
+
+.modal-content{
+  background:white;
+  padding:20px;
+  border-radius:10px;
+  width:95%;
+  max-width:500px;
+}
+
+input{
+  width:100%;
+  padding:8px;
+  margin:5px 0;
+  border-radius:6px;
+  border:1px solid #ccc;
+}
+
+.saveBtn{
+  background:#2874f0;
+  color:white;
+  width:100%;
+  margin-top:10px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+  My Orders
+</div>
+
+<div class="container">
+  <div id="orders"></div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal" id="editModal">
+  <div class="modal-content">
+    <h3>Edit Address (Only Once)</h3>
+
+    <input type="text" id="edit_name" placeholder="Full Name">
+    <input type="text" id="edit_phone" placeholder="Phone">
+    <input type="email" id="edit_email" placeholder="Email">
+    <input type="text" id="edit_address" placeholder="Address">
+    <input type="text" id="edit_city" placeholder="City">
+    <input type="text" id="edit_state" placeholder="State">
+    <input type="text" id="edit_pin" placeholder="PIN Code">
+
+    <button class="saveBtn" onclick="saveChanges()">Save Changes</button>
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+
+const supabase = createClient(
+  "https://ooiumaohawwtqtiodqcv.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vaXVtYW9oYXd3dHF0aW9kcWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNDQ1MjMsImV4cCI6MjA4NjcyMDUyM30.S_1J8CFMa1KJUYfk1VYeUcFRqUo23NEGzNlxr5fQsvA"
+)
+
+const ordersDiv = document.getElementById("orders")
+const modal = document.getElementById("editModal")
+let currentOrderId = null
+
+async function loadOrders(){
+
+  const { data:{ session } } = await supabase.auth.getSession()
+
+  if(!session){
+    ordersDiv.innerHTML="<p class='empty'>Please login first ❌</p>"
+    return
+  }
+
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("user_id", session.user.id)
+    .order("id", { ascending:false })
+
+  if(error || !data.length){
+    ordersDiv.innerHTML="<p class='empty'>No orders found 📦</p>"
+    return
+  }
+
+  ordersDiv.innerHTML=""
+
+  data.forEach(order=>{
+    let badgeClass="pending"
+    if(order.status==="Shipped") badgeClass="shipped"
+    if(order.status==="Delivered") badgeClass="delivered"
+    if(order.status==="Cancelled") badgeClass="cancelled"
+
+    // USE discount_amount properly
+    const discount = order.discount_amount || 0
+    const subtotal = order.total_amount || 0
+    const finalTotal = order.final_total || (subtotal - discount)
+
+    let editButton = ""
+    if(order.status==="Pending" && !order.address_updated){
+      editButton = `<button class="editBtn" onclick="editOrder(${order.id})">Edit Address</button>`
+    } else if(order.address_updated){
+      editButton = `<button class="disabledBtn" disabled>Already Updated</button>`
+    }
+
+    ordersDiv.innerHTML+=`
+      <div class="card">
+        <div class="row">
+          <div>
+            <b>Order #${order.id}</b><br>
+            <small>${new Date(order.created_at).toLocaleString()}</small>
+          </div>
+          <div class="badge ${badgeClass}">
+            ${order.status}
+          </div>
+        </div>
+
+        <hr>
+
+        <p><b>Subtotal:</b> ₹${subtotal}</p>
+        <p><b>Discount:</b> ₹${discount}</p>
+        <h3>Total: ₹${finalTotal}</h3>
+
+        <button class="viewBtn" onclick="viewOrder(${order.id})">
+          View Details
+        </button>
+
+        ${order.status==="Pending" ? 
+          `<button class="cancelBtn" onclick="cancelOrder(${order.id})">
+            Cancel Order
+          </button>` 
+        : ""}
+
+        ${editButton}
+      </div>
+    `
+  })
+}
+
+loadOrders()
+
+// EDIT OPEN
+window.editOrder = async function(id){
+  currentOrderId = id
+  modal.style.display="flex"
+
+  const { data } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("id", id)
+    .single()
+
+  document.getElementById("edit_name").value = data.customer_name
+  document.getElementById("edit_phone").value = data.customer_phone
+  document.getElementById("edit_email").value = data.email
+  document.getElementById("edit_address").value = data.address
+  document.getElementById("edit_city").value = data.city
+  document.getElementById("edit_state").value = data.state
+  document.getElementById("edit_pin").value = data.pin_code
+}
+
+// SAVE CHANGES
+window.saveChanges = async function(){
+
+  const { data } = await supabase
+    .from("orders")
+    .select("address_updated,status")
+    .eq("id", currentOrderId)
+    .single()
+
+  if(data.status !== "Pending"){
+    alert("Order already confirmed ❌")
+    return
+  }
+
+  if(data.address_updated){
+    alert("Address already changed once ❌")
+    return
+  }
+
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      customer_name:edit_name.value,
+      customer_phone:edit_phone.value,
+      email:edit_email.value,
+      address:edit_address.value,
+      city:edit_city.value,
+      state:edit_state.value,
+      pin_code:edit_pin.value,
+      address_updated:true
+    })
+    .eq("id", currentOrderId)
+
+  if(error){
+    alert("Update Failed ❌")
+  }else{
+    alert("Address Updated Successfully ✅")
+    modal.style.display="none"
+    loadOrders()
+  }
+}
+
+// CLOSE MODAL
+modal.addEventListener("click",(e)=>{
+  if(e.target===modal){
+    modal.style.display="none"
+  }
+})
+
+// CANCEL
+window.cancelOrder = async function(id){
+  const confirmCancel = confirm("Are you sure to cancel this order?")
+  if(!confirmCancel) return
+
+  const { error } = await supabase
+    .from("orders")
+    .update({ status:"Cancelled" })
+    .eq("id", id)
+
+  if(error){
+    alert("Cancel failed ❌")
+  }else{
+    alert("Order Cancelled ✅")
+    loadOrders()
+  }
+}
+
+window.viewOrder = function(id){
+  window.location.href="/sell/order items.html?id="+id
+}
+</script>
+
+</body>
+</html>
