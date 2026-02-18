@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Register - MyShop</title>
+
+<style>
+body{
+margin:0;
+font-family:system-ui;
+background:#2874f0;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+}
+
+.box{
+background:white;
+padding:25px;
+border-radius:12px;
+width:320px;
+text-align:center;
+box-shadow:0 10px 25px rgba(0,0,0,0.2);
+}
+
+h2{
+margin-bottom:15px;
+}
+
+input{
+width:100%;
+padding:10px;
+margin:8px 0;
+border-radius:6px;
+border:1px solid #ddd;
+outline:none;
+}
+
+button{
+width:100%;
+padding:10px;
+background:#fb641b;
+color:white;
+border:none;
+border-radius:6px;
+cursor:pointer;
+margin-top:10px;
+font-size:14px;
+}
+
+button:hover{
+opacity:0.9;
+}
+
+.link{
+margin-top:10px;
+font-size:13px;
+}
+
+.link a{
+text-decoration:none;
+color:#2874f0;
+}
+
+#msg{
+margin-top:10px;
+font-size:13px;
+color:red;
+}
+</style>
+</head>
+
+<body>
+
+<div class="box">
+<h2>Create Account</h2>
+
+<input type="email" id="email" placeholder="Enter Email">
+<input type="password" id="password" placeholder="Enter Password">
+<input type="password" id="confirmPassword" placeholder="Confirm Password">
+
+<button onclick="register()">Register</button>
+
+<div class="link">
+Already have account? <a href="login.html">Login</a>
+</div>
+
+<p id="msg"></p>
+
+</div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+
+const supabase = createClient(
+"https://ooiumaohawwtqtiodqcv.supabase.co",
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vaXVtYW9oYXd3dHF0aW9kcWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNDQ1MjMsImV4cCI6MjA4NjcyMDUyM30.S_1J8CFMa1KJUYfk1VYeUcFRqUo23NEGzNlxr5fQsvA"
+)
+
+window.register = async () => {
+
+const email = document.getElementById("email").value
+const password = document.getElementById("password").value
+const confirmPassword = document.getElementById("confirmPassword").value
+const msg = document.getElementById("msg")
+
+msg.innerText = ""
+
+if(!email || !password){
+msg.innerText = "All fields required"
+return
+}
+
+if(password.length < 6){
+msg.innerText = "Password must be at least 6 characters"
+return
+}
+
+if(password !== confirmPassword){
+msg.innerText = "Passwords do not match"
+return
+}
+
+const { data, error } = await supabase.auth.signUp({
+email,
+password
+})
+
+if(error){
+msg.innerText = error.message
+return
+}
+
+alert("Registration Successful 🎉")
+
+window.location.href = "index.html"
+}
+</script>
+
+</body>
+</html>
