@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Order Successful</title>
+
+<style>
+body{
+font-family:system-ui;
+background:#f1f3f6;
+margin:0;
+text-align:center;
+}
+.container{
+max-width:600px;
+margin:auto;
+padding:20px;
+}
+.card{
+background:white;
+padding:20px;
+border-radius:10px;
+box-shadow:0 2px 10px rgba(0,0,0,0.1);
+}
+.success{
+font-size:22px;
+color:green;
+margin-bottom:10px;
+}
+button{
+margin-top:15px;
+padding:12px;
+background:#2874f0;
+color:white;
+border:none;
+border-radius:6px;
+width:100%;
+font-size:16px;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+<div class="card">
+
+<div class="success">✅ Order Placed Successfully!</div>
+
+<p id="orderId"></p>
+<p id="orderTotal"></p>
+<p>Payment Method: Cash On Delivery</p>
+<p>Status: Pending</p>
+
+<button onclick="goHome()">Continue Shopping</button>
+
+</div>
+</div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+
+const supabase = createClient(
+"https://ooiumaohawwtqtiodqcv.supabase.co",
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vaXVtYW9oYXd3dHF0aW9kcWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNDQ1MjMsImV4cCI6MjA4NjcyMDUyM30.S_1J8CFMa1KJUYfk1VYeUcFRqUo23NEGzNlxr5fQsvA"
+)
+
+const orderId = localStorage.getItem("lastOrderId")
+
+if(!orderId){
+document.body.innerHTML="<h2>Invalid Access ❌</h2>"
+}
+
+document.getElementById("orderId").innerText="Order ID: "+orderId
+
+const { data } = await supabase
+.from("orders")
+.select("total_amount")
+.eq("id",orderId)
+.single()
+
+if(data){
+document.getElementById("orderTotal").innerText="Total Paid: ₹"+data.total_amount
+}
+
+window.goHome = ()=>{
+window.location.href="index.html"
+}
+</script>
+
+</body>
+</html>
