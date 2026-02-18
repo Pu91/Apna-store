@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Order Details</title>
+
+<style>
+body{
+  font-family:system-ui;
+  background:#f1f3f6;
+  margin:0;
+}
+
+.header{
+  background:#2874f0;
+  color:white;
+  padding:12px;
+  text-align:center;
+  font-size:18px;
+  font-weight:bold;
+}
+
+.container{
+  max-width:900px;
+  margin:auto;
+  padding:15px;
+}
+
+.card{
+  background:white;
+  padding:15px;
+  border-radius:12px;
+  margin-bottom:15px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.08);
+}
+
+.product{
+  display:flex;
+  gap:15px;
+  padding:10px 0;
+  border-bottom:1px solid #eee;
+}
+
+.product:last-child{
+  border-bottom:none;
+}
+
+.product img{
+  width:80px;
+  height:80px;
+  object-fit:cover;
+  border-radius:8px;
+}
+
+.status{
+  padding:6px 12px;
+  border-radius:20px;
+  font-size:13px;
+  display:inline-block;
+  margin-top:5px;
+}
+
+.pending{background:#fff3cd;color:#856404;}
+.shipped{background:#d1ecf1;color:#0c5460;}
+.out{background:#ffeeba;color:#856404;}
+.delivered{background:#d4edda;color:#155724;}
+.cancelled{background:#f8d7da;color:#721c24;}
+
+.summaryRow{
+  display:flex;
+  justify-content:space-between;
+  margin:6px 0;
+}
+
+.total{
+  font-size:18px;
+  font-weight:bold;
+}
+
+.btn{
+  padding:10px;
+  border:none;
+  border-radius:6px;
+  width:100%;
+  margin-top:10px;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+.trackBtn{background:#2874f0;color:white;}
+.printBtn{background:#28a745;color:white;}
+.cancelBtn{background:#dc3545;color:white;}
+</style>
+</head>
+
+<body>
+
+<div class="header">Order Details</div>
+
+<div class="container">
+  <div id="orderDetails">Loading order...</div>
+</div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+
+const supabase = createClient(
+  "https://ooiumaohawwtqtiodqcv.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vaXVtYW9oYXd3dHF0aW9kcWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNDQ1MjMsImV4cCI6MjA4NjcyMDUyM30.S_1J8CFMa1KJUYfk1VYeUcFRqUo23NEGzNlxr5fQsvA"
+)
+
+const params = new URLSearchParams(window.location.search)
+const orderId = parseInt(params.get("id"))
+const container = document.getElementById("orderDetails")
+
+if(!orderId){
+  container.innerHTML = "<p style='color:red;'>Invalid order ID!</p>"
+  throw new Error("Invalid order ID")
+}
+
+async function loadOrder(){
+  try{
+
+    const { data:{ session } } = await supabase.auth.getSession()
+    if(!session){
+      container.innerHTML="<p>Please login ❌</p>"
+      return
+    }
+
+    // FETCH ORDER
+    const { data:order, error:orderError } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("id", orderId)
+      .single()
+
+    if(orderError || !order){
+      container.innerHTML="<p style='color:red;'>Order not found ❌</p>"
+      return
+    }
+
+    // FETCH ORDER ITEMS
+    const { data:items, error:itemError } = await supabase
+      .from("order_items")
+      .select(`
+        quantity,
+        price,
+        product:products(id,name,images)
+      `)
+      .eq("order_id", orderId)
+
+    if(itemError){
+      console.error("Item Fetch Error:", itemError)
+    }
+
+    let productHTML = ""
+    let subtotal = 0
+
+    if(!items || items.length === 0){
+      productHTML = "<p style='color:red;'>No products found for this order.</p>"
+    } else {
+      items.forEach(item=>{
+        const firstImage = item.product?.images?.[0] || "https://via.placeholder.com/80"
+        const price = Number(item.price) || 0
+        const qty = Number(item.quantity) || 0
+        const itemTotal = price * qty
+        subtotal += itemTotal
+
+        productHTML+=`
+          <div class="product">
+            <img src="${firstImage}" />
+            <div>
+              <p><b>${item.product?.name || 'Unknown Product'}</b></p>
+              <p>₹${price} × ${qty} = ₹${itemTotal.toFixed(2)}</p>
+            </div>
+          </div>
+        `
+      })
+    }
+
+    const discount = Number(order.discount_amount) || 0
+    let finalTotal = subtotal - discount
+    if(finalTotal < 0) finalTotal = 0
+
+    let statusClass="pending"
+    if(order.status==="Shipped") statusClass="shipped"
+    if(order.status==="Out for Delivery") statusClass="out"
+    if(order.status==="Delivered") statusClass="delivered"
+    if(order.status==="Cancelled") statusClass="cancelled"
+
+    container.innerHTML = `
+      <div class="card">
+        <h3>Order ID: ${order.id}</h3>
+        <p>Order Date: ${new Date(order.created_at).toLocaleString()}</p>
+        <div class="status ${statusClass}">${order.status}</div>
+      </div>
+
+      <div class="card">
+        <h3>Products</h3>
+        ${productHTML}
+      </div>
+
+      <div class="card">
+        <h3>Bill Summary</h3>
+
+        <div class="summaryRow">
+          <span>Subtotal</span>
+          <span>₹${subtotal.toFixed(2)}</span>
+        </div>
+
+        <div class="summaryRow">
+          <span>Discount</span>
+          <span style="color:green;">- ₹${discount.toFixed(2)}</span>
+        </div>
+
+        <hr>
+
+        <div class="summaryRow total">
+          <span>Total Payable</span>
+          <span>₹${finalTotal.toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Delivery Address</h3>
+        <p><b>${order.customer_name}</b></p>
+        <p>${order.customer_phone}</p>
+        <p>${order.email}</p>
+        <p>${order.address}, ${order.city}</p>
+        <p>${order.state} - ${order.pin_code}</p>
+      </div>
+
+      <button class="btn trackBtn" onclick="trackOrder('${order.id}')">
+        Track Delivery
+      </button>
+
+      <button class="btn printBtn" onclick="window.print()">
+        Print Invoice
+      </button>
+
+      ${order.status==="Pending" ? `
+      <button class="btn cancelBtn" onclick="cancelOrder('${order.id}')">
+        Cancel Order
+      </button>
+      ` : ""}
+    `
+
+  } catch(err){
+    container.innerHTML = `<p style="color:red;">Error: ${err.message}</p>`
+    console.error(err)
+  }
+}
+
+window.trackOrder = function(orderId){
+  window.location.href = "/sell/track.html?id=" + orderId
+}
+
+window.cancelOrder = async function(orderId){
+  if(confirm("Are you sure to cancel this order?")){
+    await supabase.from("orders")
+      .update({status:"Cancelled"})
+      .eq("id", orderId)
+    alert("Order Cancelled ❌")
+    loadOrder()
+  }
+}
+
+loadOrder()
+</script>
+
+</body>
+</html>
