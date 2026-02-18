@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Track Order</title>
+
+<style>
+body{
+  font-family:system-ui;
+  background:#f1f3f6;
+  margin:0;
+}
+
+.container{
+  max-width:600px;
+  margin:auto;
+  padding:20px;
+}
+
+.card{
+  background:white;
+  padding:20px;
+  border-radius:12px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.1);
+}
+
+.timeline{
+  position:relative;
+  margin-top:30px;
+}
+
+.line{
+  position:absolute;
+  left:20px;
+  top:0;
+  width:4px;
+  height:100%;
+  background:#ddd;
+}
+
+.progress{
+  position:absolute;
+  left:20px;
+  top:0;
+  width:4px;
+  height:0%;
+  background:#2874f0;
+  transition:height 1.5s ease;
+}
+
+.step{
+  display:flex;
+  align-items:center;
+  margin-bottom:40px;
+  position:relative;
+}
+
+.circle{
+  width:18px;
+  height:18px;
+  border-radius:50%;
+  background:#ddd;
+  margin-right:15px;
+  z-index:2;
+}
+
+.step.active .circle{
+  background:#2874f0;
+}
+
+.step p{
+  margin:0;
+}
+
+.statusText{
+  margin-top:20px;
+  font-weight:bold;
+  text-align:center;
+  color:#2874f0;
+}
+
+.adminNote{
+  background:#f9f9f9;
+  padding:15px;
+  border-radius:8px;
+  margin-top:20px;
+  border-left:4px solid #2874f0;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+  <h2>Track Your Order</h2>
+
+  <div class="card">
+    <div class="timeline">
+      <div class="line"></div>
+      <div class="progress" id="progressLine"></div>
+
+      <div class="step" id="step1">
+        <div class="circle"></div>
+        <p>Order Placed</p>
+      </div>
+
+      <div class="step" id="step2">
+        <div class="circle"></div>
+        <p>Shipped</p>
+      </div>
+
+      <div class="step" id="step3">
+        <div class="circle"></div>
+        <p>Out for Delivery</p>
+      </div>
+
+      <div class="step" id="step4">
+        <div class="circle"></div>
+        <p>Delivered</p>
+      </div>
+
+    </div>
+
+    <div class="statusText" id="statusText"></div>
+
+    <!-- Admin message will appear here -->
+    <div class="adminNote" id="adminNote" style="display:none"></div>
+
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+
+const supabase = createClient(
+  "https://ooiumaohawwtqtiodqcv.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vaXVtYW9oYXd3dHF0aW9kcWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNDQ1MjMsImV4cCI6MjA4NjcyMDUyM30.S_1J8CFMa1KJUYfk1VYeUcFRqUo23NEGzNlxr5fQsvA"
+)
+
+const params = new URLSearchParams(window.location.search)
+const orderId = params.get("id")
+
+const progressLine = document.getElementById("progressLine")
+const statusText = document.getElementById("statusText")
+const adminNoteDiv = document.getElementById("adminNote")
+
+async function loadStatus(){
+
+  const { data } = await supabase
+    .from("orders")
+    .select("status,message")
+    .eq("id", orderId)
+    .single()
+
+  const status = data.status
+  const message = data.message
+
+  let height = 0
+
+  // Reset all steps first
+  document.querySelectorAll(".step").forEach(s => s.classList.remove("active"))
+
+  if(status==="Pending"){
+    document.getElementById("step1").classList.add("active")
+    height = 10
+    statusText.innerText="Your order has been placed successfully ✅"
+  }
+
+  else if(status==="Shipped"){
+    document.getElementById("step1").classList.add("active")
+    document.getElementById("step2").classList.add("active")
+    height = 40
+    statusText.innerText="Your order has been shipped 🚚"
+  }
+
+  else if(status==="Out for Delivery" || status==="Out of Delivery"){
+    // Accept both versions to be safe
+    document.getElementById("step1").classList.add("active")
+    document.getElementById("step2").classList.add("active")
+    document.getElementById("step3").classList.add("active")
+    height = 75
+    statusText.innerText="Out for Delivery 📦"
+  }
+
+  else if(status==="Delivered"){
+    document.getElementById("step1").classList.add("active")
+    document.getElementById("step2").classList.add("active")
+    document.getElementById("step3").classList.add("active")
+    document.getElementById("step4").classList.add("active")
+    height = 100
+    statusText.innerText="Order Delivered Successfully 🎉"
+  }
+
+  // Show admin message if available
+  if(message && message.trim()!==""){
+    adminNoteDiv.style.display="block"
+    adminNoteDiv.innerText = "Admin Note: " + message
+  }
+
+  setTimeout(()=>{
+    progressLine.style.height = height + "%"
+  },300)
+}
+
+loadStatus()
+</script>
+
+</body>
+</html>
